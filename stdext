@@ -1,0 +1,424 @@
+#pragma once
+
+#include <functional>
+#include <utility>
+#include <algorithm>
+#include <numeric>
+#include <istream>
+
+#include <random>
+
+// sorted according to https://en.cppreference.com/w/cpp/header
+
+namespace stdext {
+inline _STD mt19937 engine {_STD random_device{}()};
+}
+
+_STD_BEGIN
+#pragma region Utilities
+
+#pragma region functional
+// FUNCTION TEMPLATE hash_combine
+// combine multiple hash values, from boost::hash_combine
+template<class _Ty>
+	inline void hash_combine(size_t& _Seed, const _Ty& _Val)
+	{
+	_Seed ^= _STD hash<_Ty>{}(_Val) + 0x9e3779b9 + (_Seed << 6) + (_Seed >> 2);
+	}
+#pragma endregion
+
+#pragma region utility
+// FUNCTION TEMPLATE switch_value
+template<class _Ty>
+	void switch_value(_Ty _Val)
+	{
+	}
+
+template<class _Ty,
+	class _Fn> inline
+	void switch_value(_Ty _Val, _Fn _Func)
+	{
+	if constexpr (_STD is_invocable_v<_Fn, _Ty>)
+		_Func(_Val);
+	else
+		_Func();
+	}
+
+template<class _Ty,
+	class _Ty1,
+	class _Fn1,
+	class... _Rest> inline
+	void switch_value(_Ty _Val, _Ty1 _Cand, _Fn1 _Func1, _Rest... _Rests)
+	{
+	if (_Val == _Cand)
+		_Func1();
+	else
+		switch_value(_Val, _STD forward<_Rest>(_Rests)...);
+	}
+#pragma endregion
+
+#pragma endregion
+
+#pragma region Algorithms
+
+#pragma region algorithm
+
+// FUNCTION TEMPLATE sort1
+// order [_First, _Last), using _Pred
+template<class _RanIt,
+	class _Pr> inline
+	void sort1(const _RanIt _First, const _RanIt _Last, _Pr _Pred)
+	{
+	using _Ty = typename _RanIt::value_type;
+	sort(_First, _Last, [&](_Ty& a, _Ty& b) { return _Pred(a) < _Pred(b); });
+	}
+
+// FUNCTION TEMPLATE max_element1
+// find smallest element, using _Pred
+template<class _FwdIt,
+	class _Pr>
+	_NODISCARD constexpr _FwdIt max_element1(_FwdIt _First, _FwdIt _Last, _Pr _Pred)
+	{
+	using _Ty = typename _FwdIt::value_type;
+	return max_element(_First, _Last, [&](_Ty& a, _Ty& b) { return _Pred(a) < _Pred(b); });
+	}
+
+// FUNCTION TEMPLATE min_element1
+// find smallest element, using _Pred
+template<class _FwdIt,
+	class _Pr>
+	_NODISCARD constexpr _FwdIt min_element1(_FwdIt _First, _FwdIt _Last, _Pr _Pred)
+	{
+	using _Ty = typename _FwdIt::value_type;
+	return min_element(_First, _Last, [&](_Ty& a, _Ty& b) { return _Pred(a) < _Pred(b); });
+	}
+
+// FUNCTION TEMPLATE size
+// count the total number of elements in a container of containers
+template<class _InIt,
+	class _Ty = size_t> inline
+	_Ty size(_InIt _First, _InIt _Last)
+	{
+	return (accumulate(_First, _Last, _Ty(0),
+		[](_Ty sum, typename _InIt::value_type _Val) { return (sum + _Val.size()); }));
+	}
+
+// FUNCTION TEMPLATE flatten
+// flatten a container of containers
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt flatten(_InIt _First, _InIt _Last, _OutIt _Dest)
+	{
+	for (; _First != _Last; ++_First)
+		_Dest = copy(_First->begin(), _First->end(), _Dest);
+	return (_Dest);
+	}
+
+// FUNCTION TEMPLATE select_by_indices
+// return a subset of the first container, using the second as indices
+template<class _InIt1,
+	class _InIt2,
+	class _OutIt> inline
+	_OutIt select_by_indices(_InIt1 _First1,
+		_InIt2 _First2, _InIt2 _Last2,
+		_OutIt _Dest)
+	{
+	for (; _First2 != _Last2; ++_First2, ++_Dest)
+		*_Dest = _First1[*_First2];
+	return (_Dest);
+	}
+
+// FUNCTION TEMPLATE select_by_mask
+// return a subset of the first container, using the second as mask array
+template<class _InIt1,
+	class _InIt2,
+	class _OutIt> inline
+	_OutIt select_by_mask(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2,
+		_OutIt _Dest)
+	{
+	for (; _First1 != _Last1; ++_First1, ++_First2)
+		if (*_First2)
+			{
+			*_Dest = *_First1;
+			++_Dest;
+			}
+	return (_Dest);
+	}
+#pragma endregion
+
+#pragma region Numerics
+
+#pragma region numeric
+// TODO enable if
+// FUNCTION TEMPLATE lerp
+template<typename _Ty,
+	typename _Prec> inline
+	const _Ty lerp(const _Ty& _X, const _Ty& _Y, const _Prec& _Lambda)
+	{
+	return (_Y - _X) * _Lambda + _X;
+	}
+
+// STRUCT TEMPLATE square_sum
+// functor for getting sum of previous result and square of current element
+template<typename _Ty>
+	struct square_sum
+	{
+	_Ty operator()(const _Ty& _Left, const _Ty& _Right) const
+		{
+		return (_Left + _Right * _Right);
+		}
+	};
+
+// FUNCTION TEMPLATE mean
+template<class _InIt,
+	class _Ty = typename _InIt::value_type> inline
+	_Ty mean(_InIt _First, _InIt _Last, _Ty _Val = _Ty(0.0))
+	{
+	return (_STD accumulate(_First, _Last, _Val)
+		/ _STD distance(_First, _Last));
+	}
+
+// FUNCTION TEMPLATE quick_median
+// destructively find the element at the center (not necessary the median)
+template<class _InIt,
+	class _Ty = typename iterator_traits<_InIt>::value_type> inline
+	_Ty quick_median(_InIt _First, _InIt _Last)
+	{
+	size_t _Count = _STD distance(_First, _Last);
+	_STD nth_element(_First, _STD next(_First, _Count / 2), _Last);
+	return (*(_STD next(_First, _Count / 2)));
+	}
+	
+// FUNCTION TEMPLATE variance
+template<class _InIt,
+	class _Ty = typename _InIt::value_type> inline
+	_Ty variance(_InIt _First, _InIt _Last)
+	{
+	_Ty _Mean = mean(_First, _Last);
+	size_t _Count = _STD distance(_First, _Last);
+	return (_STD accumulate(_First, _Last, _Ty(0.0), square_sum<_Ty>{})
+		/ _Ty(_Count) - _Mean * _Mean);
+	}
+
+// FUNCTION TEMPLATE covariance
+template<class _InIt1,
+	class _InIt2,
+	class _Ty = typename _InIt1::value_type> inline
+	_Ty covariance(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2)
+	{
+	size_t _Count = _STD distance(_First1, _Last1);
+	_Ty _Mean1 = _STD mean(_First1, _Last1);
+	_Ty _Mean2 = _STD mean(_First2, _STD next(_First2, _Count));
+	return (_STD inner_product(_First1, _Last1, _First2, _Ty(0.0))
+		/ _Ty(_Count) - _Mean1 * _Mean2);
+	}
+
+// FUNCTION TEMPLATE correlation
+template<class _InIt1,
+	class _InIt2,
+	class _Ty = typename _InIt1::value_type> inline
+	_Ty correlation(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2)
+	{
+	size_t _Count = _STD distance(_First1, _Last1);
+	_InIt2 _Last2 = _STD next(_First2, _Count);
+	_Ty _Mean1 = _STD mean(_First1, _Last1);
+	_Ty _Mean2 = _STD mean(_First2, _Last2);
+	_Ty _Var1 = _STD accumulate(_First1, _Last1, _Ty(0.0), square_sum<_Ty>{})
+		/ _Ty(_Count) - _Mean1 * _Mean1;
+	_Ty _Var2 = _STD accumulate(_First2, _Last2, _Ty(0.0), square_sum<_Ty>{})
+		/ _Ty(_Count) - _Mean2 * _Mean2;
+	return ((_STD inner_product(_First1, _Last1, _First2, _Ty(0.0))
+		/ _Ty(_Count) - _Mean1 * _Mean2) / _CSTD sqrt(_Var1 * _Var2));
+	}
+
+// FUNCTION TEMPLATE entropy
+template<class _InIt,
+	class _Ty = typename _InIt::value_type> inline
+	_Ty entropy(_InIt _First, _InIt _Last)
+	{
+	_Ty _Sum = _STD accumulate(_First, _Last, _Ty(0.0));
+	return (_STD accumulate(_First, _Last, _Ty(0.0),
+		[&](_Ty _Left, _Ty _Right)
+		{
+		_Ty _Prob = _Right / _Sum;
+		return (_Left - ((_Prob == _Ty(0.0)) ? _Ty(0.0) : (_Prob * log(_Prob))));
+		}));
+	}
+
+// FUNCTION TEMPLATE robust_minmax_element
+// destructively find min and max values excluding outliers defined by quantiles
+template<class _FwdIt,
+	class _Ty = float> inline
+	_STD pair<_FwdIt, _FwdIt> robust_minmax_element(_FwdIt _First, _FwdIt _Last,
+		_Ty _Quantile = 0.05f)
+	{
+	size_t _Count = _STD distance(_First, _Last);
+	size_t _Min_Count = size_t(_Count * _Quantile);
+	size_t _Max_Count = size_t(_Count * (_Ty(1) - _Quantile));
+	_STD nth_element(_First, _STD next(_First, _Min_Count), _Last);
+	_STD nth_element(_First, _STD next(_First, _Max_Count), _Last);
+	return (_STD make_pair(_STD next(_First, _Min_Count), _STD next(_First, _Max_Count)));
+	}
+#pragma endregion
+
+#pragma region random
+// FUNCTION TEMPLATE sample_k
+// random select k elements from 0~(size-1)
+template<class _Ty> inline
+	_STD vector<_Ty> sample_k(_Ty _Size, _Ty _Count)
+	{
+	_STD vector<_Ty> _Cand(_Size);
+	_STD vector<_Ty> _Result(_Count);
+	_STD iota(_Cand.begin(), _Cand.end(), _Ty(0));
+	_STD sample(_Cand.begin(), _Cand.end(), _Result.begin(), _Count, stdext::engine);
+	return (_Result);
+	}
+
+// FUNCTION TEMPLATE for_random_k
+// for_each for random k elements
+template<class _InIt,
+	class _Ty,
+	class _Fn> inline
+	_Fn for_random_k(_InIt _First, _InIt _Last, _Ty _Count, _Fn _Func)
+	{
+	assert(_Count <= _STD distance(_First, _Last));
+	_STD vector<size_t> _Indices(_STD distance(_First, _Last));
+	_STD iota(_Indices.begin(), _Indices.end(), 0);
+	_STD shuffle(_Indices.begin(), _Indices.end(), stdext::engine);
+	_STD for_each_n(_First, _Count, _Func);
+	retur (_Func);
+	}
+#pragma endregion random
+
+#pragma endregion
+
+#pragma region Input/output
+
+#pragma region istream
+// istream for C-sytle string
+template<class _Elem = char,
+	class _Traits = char_traits<_Elem>> inline
+	basic_istream<_Elem, _Traits>& operator>>(basic_istream<_Elem, _Traits>& _Istr,
+		const char* _Str)
+	{
+	char _Ch;
+#if _DEBUG
+	for (size_t _Index = 0; _Str[_Index] != '\0'; ++_Index)
+		{
+		_Istr >> _Ch;
+		if (_Ch != _Str[_Index])
+			{
+			_Istr.setstate(std::ios::failbit);
+			}
+		}
+#else
+	size_t _Len = strlen(_Str);
+	if (_Len)
+		{
+		_Istr >> _Ch;
+		_Istr.ignore(_Len - 1);
+		}
+#endif
+	return _Istr;
+	}
+#pragma endregion
+
+#pragma endregion
+
+#pragma region removed
+// adapters for (some) removed functions used by some old libraries
+
+// removed in C++17 
+// use std::shuffle instead
+#if _HAS_CXX17
+// TEMPLATE FUNCITON random_shuffle
+template<class _It> inline
+	void random_shuffle(_It _First, _It _Last)
+	{
+	_STD shuffle(_First, _Last, stdext::engine);
+	}
+
+// TEMPLATE STRUCT unary_function
+// "use std::function instead"
+template<class _Arg,
+	class _Result>
+	struct unary_function
+	{	// base class for unary functions
+	typedef _Arg argument_type;
+	typedef _Result result_type;
+	};
+
+// TEMPLATE CLASS binder1st
+// use std::bind instead
+template<class _Fn2>
+	class binder1st
+		: public unary_function<typename _Fn2::second_argument_type,
+			typename _Fn2::result_type>
+	{	// functor adapter _Func(stored, right)
+public:
+	typedef unary_function<typename _Fn2::second_argument_type,
+		typename _Fn2::result_type> _Base;
+	typedef typename _Base::argument_type argument_type;
+	typedef typename _Base::result_type result_type;
+
+	binder1st(const _Fn2& _Func,
+		const typename _Fn2::first_argument_type& _Left)
+		: op(_Func), value(_Left)
+		{	// construct from functor and left operand
+		}
+
+	result_type operator()(const argument_type& _Right) const
+		{	// apply functor to operands
+		return (op(value, _Right));
+		}
+
+	result_type operator()(argument_type& _Right) const
+		{	// apply functor to operands
+		return (op(value, _Right));
+		}
+
+protected:
+	_Fn2 op;	// the functor to apply
+	typename _Fn2::first_argument_type value;	// the left operand
+	};
+
+// TEMPLATE CLASS binder2nd
+// use std::bind instead
+template<class _Fn2>
+	class binder2nd
+		: public unary_function<typename _Fn2::first_argument_type,
+			typename _Fn2::result_type>
+	{	// functor adapter _Func(left, stored)
+public:
+	typedef unary_function<typename _Fn2::first_argument_type,
+		typename _Fn2::result_type> _Base;
+	typedef typename _Base::argument_type argument_type;
+	typedef typename _Base::result_type result_type;
+
+	binder2nd(const _Fn2& _Func,
+		const typename _Fn2::second_argument_type& _Right)
+		: op(_Func), value(_Right)
+		{	// construct from functor and right operand
+		}
+
+	result_type operator()(const argument_type& _Left) const
+		{	// apply functor to operands
+		return (op(_Left, value));
+		}
+
+	result_type operator()(argument_type& _Left) const
+		{	// apply functor to operands
+		return (op(_Left, value));
+		}
+
+protected:
+	_Fn2 op;	// the functor to apply
+	typename _Fn2::second_argument_type value;	// the right operand
+	};
+#endif // _HAS_CXX17
+
+#pragma endregion
+_STD_END
