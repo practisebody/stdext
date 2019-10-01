@@ -25,7 +25,7 @@ template<class _Ty>
 	{
 	_Seed ^= _STD hash<_Ty>{}(_Val) + 0x9e3779b9 + (_Seed << 6) + (_Seed >> 2);
 	}
-#pragma endregion
+#pragma endregion functional
 
 #pragma region utility
 // FUNCTION TEMPLATE switch_value
@@ -53,11 +53,11 @@ template<class _Ty,
 	if (_Val == _Cand)
 		_Func1();
 	else
-		switch_value(_Val, _STD forward<_Rest>(_Rests)...);
+		switch_value(_Val, _Rests...);
 	}
-#pragma endregion
+#pragma endregion utility
 
-#pragma endregion
+#pragma endregion Utilities
 
 #pragma region Algorithms
 
@@ -70,7 +70,7 @@ template<class _RanIt,
 	void sort1(const _RanIt _First, const _RanIt _Last, _Pr _Pred)
 	{
 	using _Ty = typename _RanIt::value_type;
-	sort(_First, _Last, [&](_Ty& a, _Ty& b) { return _Pred(a) < _Pred(b); });
+	sort(_First, _Last, [&](_Ty a, _Ty b) { return _Pred(a) < _Pred(b); });
 	}
 
 // FUNCTION TEMPLATE max_element1
@@ -80,7 +80,7 @@ template<class _FwdIt,
 	_NODISCARD constexpr _FwdIt max_element1(_FwdIt _First, _FwdIt _Last, _Pr _Pred)
 	{
 	using _Ty = typename _FwdIt::value_type;
-	return max_element(_First, _Last, [&](_Ty& a, _Ty& b) { return _Pred(a) < _Pred(b); });
+	return max_element(_First, _Last, [&](_Ty a, _Ty b) { return _Pred(a) < _Pred(b); });
 	}
 
 // FUNCTION TEMPLATE min_element1
@@ -90,7 +90,7 @@ template<class _FwdIt,
 	_NODISCARD constexpr _FwdIt min_element1(_FwdIt _First, _FwdIt _Last, _Pr _Pred)
 	{
 	using _Ty = typename _FwdIt::value_type;
-	return min_element(_First, _Last, [&](_Ty& a, _Ty& b) { return _Pred(a) < _Pred(b); });
+	return min_element(_First, _Last, [&](_Ty a, _Ty b) { return _Pred(a) < _Pred(b); });
 	}
 
 // FUNCTION TEMPLATE size
@@ -145,7 +145,9 @@ template<class _InIt1,
 			}
 	return (_Dest);
 	}
-#pragma endregion
+#pragma endregion algorithm
+
+#pragma endregion Algorithms
 
 #pragma region Numerics
 
@@ -189,6 +191,19 @@ template<class _InIt,
 	_STD nth_element(_First, _STD next(_First, _Count / 2), _Last);
 	return (*(_STD next(_First, _Count / 2)));
 	}
+
+// FUNCTION TEMPLATE quick_median_non_destructive
+// destructively find the element at the center (not necessary the median)
+template<class _InIt,
+	class _Ty = typename iterator_traits<_InIt>::value_type> inline
+	_Ty quick_median_non_destructive(_InIt _First, _InIt _Last)
+{
+	size_t _Count = _STD distance(_First, _Last);
+	_STD vector<_Ty> _Temp(_Count);
+	_STD copy(_First, _Last, _Temp.begin());
+	_STD nth_element(_Temp.begin(), _STD next(_Temp.begin(), _Count / 2), _Temp.end());
+	return (*(_STD next(_Temp.begin(), _Count / 2)));
+}
 	
 // FUNCTION TEMPLATE variance
 template<class _InIt,
@@ -199,6 +214,16 @@ template<class _InIt,
 	size_t _Count = _STD distance(_First, _Last);
 	return (_STD accumulate(_First, _Last, _Ty(0.0), square_sum<_Ty>{})
 		/ _Ty(_Count) - _Mean * _Mean);
+	}
+
+// FUNCTION TEMPLATE stddev
+template<class _InIt,
+	class _Ty = typename _InIt::value_type> inline
+	_Ty stddev(_InIt _First, _InIt _Last)
+	{
+	_Ty _Mean = mean(_First, _Last);
+	size_t _Count = _STD distance(_First, _Last);
+	return (sqrt(_STD variance(_First, _Last)));
 	}
 
 // FUNCTION TEMPLATE covariance
@@ -250,9 +275,9 @@ template<class _InIt,
 
 // FUNCTION TEMPLATE robust_minmax_element
 // destructively find min and max values excluding outliers defined by quantiles
-template<class _FwdIt,
+template<class _InIt,
 	class _Ty = float> inline
-	_STD pair<_FwdIt, _FwdIt> robust_minmax_element(_FwdIt _First, _FwdIt _Last,
+	_STD pair<_InIt, _InIt> robust_minmax_element(_InIt _First, _InIt _Last,
 		_Ty _Quantile = 0.05f)
 	{
 	size_t _Count = _STD distance(_First, _Last);
@@ -262,13 +287,26 @@ template<class _FwdIt,
 	_STD nth_element(_First, _STD next(_First, _Max_Count), _Last);
 	return (_STD make_pair(_STD next(_First, _Min_Count), _STD next(_First, _Max_Count)));
 	}
-#pragma endregion
+
+// FUNCTION TEMPLATE normalize
+template<class _InIt,
+	class _Ty = typename _InIt::value_type> inline
+	_Ty normalize(_InIt _First, _InIt _Last)
+	{
+	_Ty _Sum = _STD accumulate(_First, _Last, _Ty(0.0));
+	if (_Sum != _Ty(0.0))
+		{
+		_STD for_each(_First, _Last, [_Sum](_Ty& _Value) { _Value /= _Sum; });
+		}
+	return (_Sum);
+	}
+#pragma endregion numeric
 
 #pragma region random
 // FUNCTION TEMPLATE sample_k
 // random select k elements from 0~(size-1)
-template<class _Ty> inline
-	_STD vector<_Ty> sample_k(_Ty _Size, _Ty _Count)
+template<class _Ty, class _Diff> inline
+	_STD vector<_Ty> sample_k(_Ty _Size, _Diff _Count)
 	{
 	_STD vector<_Ty> _Cand(_Size);
 	_STD vector<_Ty> _Result(_Count);
@@ -324,9 +362,9 @@ template<class _Elem = char,
 #endif
 	return _Istr;
 	}
-#pragma endregion
+#pragma endregion istream
 
-#pragma endregion
+#pragma endregion Input/output
 
 #pragma region removed
 // adapters for (some) removed functions used by some old libraries
